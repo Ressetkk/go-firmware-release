@@ -1,7 +1,6 @@
 package fw
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -10,27 +9,24 @@ type Packer struct {
 	MaxSize int
 	Erase   bool
 
-	size int
-	buf  *bytes.Buffer
+	size, missing int
 }
 
 func (pa *Packer) Read(p []byte) (int, error) {
 	n, err := pa.Reader.Read(p)
-	pa.size += n
-	if err == io.EOF {
-		if pa.Erase {
-			if pa.buf == nil {
-				pa.buf = &bytes.Buffer{}
-				s := pa.size + 0x800
-				r := pa.MaxSize - s
-				arr := make([]byte, r)
-				for i := range arr {
-					arr[i] = 0xff
-				}
-				pa.buf.Write(arr)
-			}
-			return pa.buf.Read(p)
+	if err == io.EOF && pa.Erase {
+		if pa.missing == 0 {
+			pa.missing = pa.MaxSize - (pa.size + 0x800)
 		}
+		for n = range p {
+			p[n] = 0xff
+			if pa.missing-n == 0 {
+				return n, io.EOF
+			}
+		}
+		pa.missing -= n
+		return n, nil
 	}
+	pa.size += n
 	return n, err
 }
